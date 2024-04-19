@@ -1,64 +1,67 @@
-const { log } = require('console');
-const http = require('http');
+
 const https = require('https');
+const http = require('http');
 
+const PORT = 5000;
 
-const PORT =  3000;
+function getStories(callback) {
+    const timeURL = 'https://time.com/';
 
-
-function getLatestTimeStories(callback) {
-    const url = 'https://time.com';
-    
-    https.get(url, (response) => {
+    https.get(timeURL, (resp) => {
         let data = '';
-        response.on('data', (chunk) => {
+        resp.on('data', (chunk) => {
             data += chunk;
         });
-
-        response.on('end', () => {
+        resp.on('end', () => {
             
-          
-            const latestStories = extractLatestStories(data);
-            console.log(latestStories);
-            callback(latestStories);
+
+            const latestStories = [];
+            let c = 0;
+
+
+            const matchingElement = /<li class="latest-stories__item">[\s\S]*?<a href="([^"]+)">[\s\S]*?<h3 class="latest-stories__item-headline">([\s\S]*?)<\/h3>/g;
+            let match;
+
+            while ((match = matchingElement.exec(data)) !== null && c < 6) {
+                const storyUrl = match[1];
+                const storytitle = match[2].trim();
+                latestStories.push(
+                    { 
+                        storytitle, url: 'https://time.com' + storyUrl 
+                    });
+
+                c++;
+            }
+
+            callback(latestStories)
+
         });
-    }).on('error', (error) => {
-        console.error(`Error fetching Time.com: ${error.message}`);
+    })
+    .on('error', (error) => {
+        
+        console.error('Error fetching Time stories:', error);
         callback([]);
     });
 }
 
 
-function extractLatestStories(html) {
-    const stories = [];
-    const titlePattern = /<h2 class="title">([^<]+)<\/h2>/g;
-    const linkPattern = /<a href="([^"]+)"/g;
+
+const server = http.createServer((req, resp) => {
     
-    let match;
-    while ((match = titlePattern.exec(html)) !== null) {
-        const title = match[1].trim();
-        const linkMatch = linkPattern.exec(html);
-        const link = linkMatch ? linkMatch[1] : '';
-        stories.push({ title, link });
-    }
+    if (req.url === '/getTimeStories') {
 
-    return stories.slice(0, 6); 
-}
-
-const server = http.createServer((req, res) => {
-    if (req.url === '/getTimeStories' && req.method === 'GET') {
-      
-        getLatestTimeStories((latestStories) => { 
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(latestStories));
+        getStories((stories) => {
+            console.log('stories:', stories)
+            resp.writeHead(200, { 'Content-Type': 'application/json' });
+            resp.end(JSON.stringify(stories));
         });
     } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('404 Not Found');
+        resp.writeHead(404, { 'Content-Type': 'text/plain' });
+        resp.end('Not Found');
     }
+}); 
+
+
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
-
- server.listen(PORT, () => {
-     console.log(`Server is runningb at this ${PORT}`)
- })
-
